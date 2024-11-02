@@ -3,66 +3,118 @@
 #include <string.h>
 #include <vector>
 #include <unistd.h>
+#include <sys/wait.h>
 
 using namespace std;
 
-vector<const char*> splitString(string input, string delim) {
-    int totalArgs = 0;
-    std::vector<const char*> strings;
+void makeArrayBigger(char*** fullArray, int* totalArrLen) {
+    int newLen = *totalArrLen * 2; // double the size
+    char** newArray = new char*[newLen];
 
-    int pos = 0;
-    string token;
-    while ((pos = input.find(delim)) != string::npos) {
-        token = input.substr(0, pos);
-        strings.push_back(token.c_str());
-        input = input.substr(pos + 1);
+    for (int i = 0; i < *totalArrLen; i++) {
+        newArray[i] = (*fullArray)[i]; // copy
     }
-    strings.push_back(input.c_str());
-
-    return strings;
+    
+    delete[] *fullArray;
+    *fullArray = newArray; // point the array to the new stuff
+    *totalArrLen = newLen;
 }
 
-void printArgs(vector<const char*> argv, int len) {
-    for(int i = 0; i < len; i++){
-        cout << argv[i] <<  "";
+void printArgs(char** argv) {
+    cout << "args: " << endl;
+    int len = 0;
+    char* arg = argv[0];
+    while (arg != nullptr){
+        cout << string(arg) <<  " ";
+        arg = argv[++len];
     }
     cout << endl;
 }
-void tryExecute(vector<const char*> argv) {
-    cout << "PATH" << getenv("PATH") << "PATH" << endl;
-    vector<const char*> paths = splitString(getenv("PATH"), ":");
-    printArgs(paths, paths.size());
-    //execvp(, char *const argv[]);
+void printArgs(char** argv, int len) {
+    cout << "args of len: " << endl;
+    for (int i = 0; i < len; i++){
+        cout << string(argv[i]) <<  " ";
+    }
+    cout << endl;
+}
+char** splitString(string input, string delim) {
+    if (input == "") return NULL;
+
+    int totalArrLen = 8; // assume 1 arg, then 1 spot for nullptr
+    int pos = 0;
+    int totalArgs = 0;
+
+    char** fullArray = new char*[totalArrLen]; // copy the array to a new array with an extra entry
+    string token;
+    while ((pos = input.find(delim)) != string::npos) {
+        token = input.substr(0, pos); // find whatever string is next
+
+        if (totalArgs+2 >= totalArrLen) { // +2 because you need to add the last token and the nullptr
+            makeArrayBigger(&fullArray, &totalArrLen); // if there are ever too many elements make the array bigger
+        }
+        //cout << "adding " << token << " to " << totalArgs << endl;
+        fullArray[totalArgs] = new char[token.size() + 1];
+        strcpy(fullArray[totalArgs], token.c_str()); // add it to the array
+        totalArgs++;
+        input = string(input.substr(pos + 1));
+    }
+    token = input.substr(pos+1);
+    fullArray[totalArgs] = new char[token.size() + 1];
+    strcpy(fullArray[totalArgs++], token.c_str());
+    fullArray[totalArgs] = nullptr;
+    return fullArray;
+}
+void tryExecuteFromPaths(char** paths, char** argv) {
+    int len = 0;
+    char* arg = paths[0];
+    while (arg != nullptr){
+        //cout << (string(arg) + "/" + string(argv[0])).c_str() << endl;
+
+        execvp((string(arg) + "/" + string(argv[0])).c_str(), argv);
+        arg = paths[++len];
+    }
+}
+void tryExecute(char** argv) {
+    auto paths = splitString(getenv("PATH"), ":");
+    tryExecuteFromPaths(paths, argv);
+    exit(0);
 }
 void acceptCommands() {
     string input = "";
 
     while (true) {
-        getline(cin,input); // later split &&
-        vector<const char*> argv = splitString(input, " ");
-        int argc = argv.size();
-        printArgs(argv, argc);
+        while (input == "") {
+            cout << " $ ";
+            getline(cin,input); // later split &&
+        }
+        auto argv = splitString(input, " ");
 
-        if (argv[0] == "cd") {
+        input = "";
+        //printArgs(argv);
+        string command = string(argv[0]);
+        if (command == "cd") {
             cout << "cd stuff";
-        } else if (argv[0] == "exit") {
-            break;
+        } else if (command == "exit") {
+            exit(0);
         }
 
-        int pid = 1;//fork();
+        int pid = fork();
         if (pid == -1) {
             perror("fork");
             exit(0);
         }
         if (pid > 0) {
-            cout << "parent";
-            exit(0);
-        } else {
+            // this is a parent :)
+            int status;
+            pid_t terminated_pid = waitpid(pid, &status, 0);
+            continue;
+        } else { // child go do the work
             tryExecute(argv);
+            cout << endl;
+            exit(0);
         }
-        //
     }
-    exit(0);
+    exit(1);
 }
 
 int main() {
