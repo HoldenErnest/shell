@@ -6,6 +6,8 @@
 #include <sys/wait.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <sys/types.h>
+#include <pwd.h>
 
 using namespace std;
 
@@ -81,9 +83,21 @@ void tryExecute(char** argv) {
     tryExecuteFromPaths(paths, argv);
     exit(0);
 }
+std::string addTwoStrings(const std::string& a, const std::string& b)
+{
+    return a + b; // works because they are both strings.
+}
 void acceptCommands() {
     char* in;
     string input = "";
+
+    struct passwd *pw = getpwuid(getuid());
+    const char *homedir = pw->pw_dir;
+    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
+    const char* historyDir = hd.c_str();
+    
+    read_history(historyDir);
+
 
     while (true) {
         while (input == "") {
@@ -102,6 +116,7 @@ void acceptCommands() {
             chdir(argv[1]);
             continue;
         } else if (command == "exit") {
+            write_history(historyDir);
             exit(0);
         }
 
