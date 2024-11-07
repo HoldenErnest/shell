@@ -4,6 +4,8 @@
 #include <vector>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 using namespace std;
 
@@ -80,20 +82,25 @@ void tryExecute(char** argv) {
     exit(0);
 }
 void acceptCommands() {
+    char* in;
     string input = "";
 
     while (true) {
         while (input == "") {
-            cout << " $ ";
-            getline(cin,input); // later split &&
+            in = readline(" $ "); // later split &&
+            input = in;
         }
+        
+        
+        if (*in) add_history(in);
         auto argv = splitString(input, " ");
-
         input = "";
+        
         //printArgs(argv);
         string command = string(argv[0]);
         if (command == "cd") {
             cout << "cd stuff";
+            continue;
         } else if (command == "exit") {
             exit(0);
         }
@@ -113,6 +120,7 @@ void acceptCommands() {
             cout << endl;
             exit(0);
         }
+        free(in); // free the memory for each command
     }
     exit(1);
 }

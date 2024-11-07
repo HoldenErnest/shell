@@ -1,2 +1,2 @@
-g++ main.cpp
+g++ main.cpp -lreadline
 ./a.out
