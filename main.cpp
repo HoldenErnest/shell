@@ -99,7 +99,7 @@ void acceptCommands() {
         //printArgs(argv);
         string command = string(argv[0]);
         if (command == "cd") {
-            cout << "cd stuff";
+            chdir(argv[1]);
             continue;
         } else if (command == "exit") {
             exit(0);
