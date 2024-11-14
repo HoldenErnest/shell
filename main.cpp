@@ -8,6 +8,7 @@
 #include <readline/history.h>
 #include <sys/types.h>
 #include <pwd.h>
+#include <wordexp.h>
 
 using namespace std;
 
@@ -97,7 +98,9 @@ void acceptCommands() {
     const char* historyDir = hd.c_str();
     
     read_history(historyDir);
+    //rl_attempted_completion_function = tab_completion_function_override;
 
+    wordexp_t * wordsP;
 
     while (true) {
         while (input == "") {
@@ -107,9 +110,12 @@ void acceptCommands() {
         
         
         if (*in) add_history(in);
-        auto argv = splitString(input, " ");
+        //wordfree(wordsP);
+        //auto argv = splitString(input, " "); // this is so sad, we wasted our time
+        int wexp = wordexp(in, wordsP, 0);
+
+        auto argv = wordsP->we_wordv;
         input = "";
-        
         //printArgs(argv);
         string command = string(argv[0]);
         if (command == "cd") {
