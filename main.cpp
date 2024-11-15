@@ -42,7 +42,7 @@ void printArgs(char** argv, int len) {
     }
     cout << endl;
 }
-char** splitString(string input, string delim) {
+char** splitString(string input, string delim) { // LEGACY (kinda)
     if (input == "") return NULL;
 
     int totalArrLen = 8; // assume 1 arg, then 1 spot for nullptr
@@ -86,7 +86,7 @@ void tryExecute(char** argv) {
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
 {
-    return a + b; // works because they are both strings.
+    return a + b;
 }
 int clearConsole(int a, int b) {
     system("clear");
@@ -100,7 +100,6 @@ void setupHotkeys() {
 }
 void acceptCommands() {
     char* in;
-    string input = "";
 
     struct passwd *pw = getpwuid(getuid());
     const char *homedir = pw->pw_dir;
@@ -116,18 +115,14 @@ void acceptCommands() {
     wordexp_t * wordsP;
 
     while (true) {
-        while (input == "") {
-            in = readline(" $ "); // later split &&
-            input = in;
-        }
+
+        in = readline(" $ "); // later split &&
         
         if (*in) add_history(in);
-        //wordfree(wordsP);
         //auto argv = splitString(input, " "); // this is so sad, we wasted our time
         int wexp = wordexp(in, wordsP, 0);
-
         auto argv = wordsP->we_wordv;
-        input = "";
+
         //printArgs(argv);
         string command = string(argv[0]);
         if (command == "cd") {
@@ -137,6 +132,8 @@ void acceptCommands() {
             write_history(historyDir);
             exit(0);
         }
+
+        // Forking stuff --------------------
 
         int pid = fork();
         if (pid == -1) {
@@ -150,12 +147,10 @@ void acceptCommands() {
             continue;
         } else { // child go do the work
             tryExecute(argv);
-            cout << endl;
-            exit(0);
         }
+        wordfree(wordsP);
         free(in); // free the memory for each command
     }
-    exit(1);
 }
 
 int main() {
