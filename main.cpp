@@ -88,6 +88,16 @@ std::string addTwoStrings(const std::string& a, const std::string& b)
 {
     return a + b; // works because they are both strings.
 }
+int clearConsole(int a, int b) {
+    system("clear");
+    cout << "[DOTSH] $ ";
+    return 0;
+}
+void setupHotkeys() {
+    rl_initialize();
+    rl_command_func_t clearConsole; // declare it as a certain type of function so bind_key can use it properly
+    rl_bind_key ('\x0C', clearConsole);//ctrl l
+}
 void acceptCommands() {
     char* in;
     string input = "";
@@ -96,9 +106,12 @@ void acceptCommands() {
     const char *homedir = pw->pw_dir;
     string hd = (addTwoStrings(homedir,"/.dotsh_history"));
     const char* historyDir = hd.c_str();
+
+    
+    setupHotkeys();
     
     read_history(historyDir);
-    //rl_attempted_completion_function = tab_completion_function_override;
+    //rl_attempted_completion_function = some_tab_completion_function_override;
 
     wordexp_t * wordsP;
 
@@ -107,7 +120,6 @@ void acceptCommands() {
             in = readline(" $ "); // later split &&
             input = in;
         }
-        
         
         if (*in) add_history(in);
         //wordfree(wordsP);
