@@ -99,13 +99,28 @@ int clearConsole(int a, int b) {
     clearConsole();
     return 0;
 }
+string getHomeDir() {
+    return getenv("HOME");
+}
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if(start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
+}
 void setupHotkeys() {
     rl_initialize();
     rl_command_func_t clearConsole; // declare it as a certain type of function so bind_key can use it properly
     rl_bind_key ('\x0C', clearConsole);//ctrl l
 }
 char** readInput(char** in, wordexp_t* wordsP) {
-    *in = readline(" \033[0m$\033[30m "); // later split &&
+    char cwd[1024];
+    string cc = string(getcwd(cwd, sizeof(cwd)));
+    string hd = getHomeDir();
+    replace(cc, hd, "~");
+    string linehead =  "\033[32m" + cc + " \033[0m$\033[30m ";
+    *in = readline(linehead.c_str()); // later split &&
     if (**in) add_history(*in);
     //auto argv = splitString(input, " "); // this is so sad, we wasted our time
     int wexp = wordexp(*in, wordsP, 0);
