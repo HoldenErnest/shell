@@ -166,6 +166,7 @@ void acceptCommands() {
             // this is a parent :)
             int status;
             pid_t terminated_pid = waitpid(pid, &status, 0);
+            //if 0 command success
         } else { // child go do the work
             tryExecute(argv);
         }
