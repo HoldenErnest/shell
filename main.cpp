@@ -13,8 +13,7 @@
 using namespace std;
 
 //Global Variables------------------
-const char* historyDir;
-const char *homedir;
+
 // END Global Variables-------------
 
 void makeArrayBigger(char*** fullArray, int* totalArrLen) {
@@ -79,8 +78,7 @@ void tryExecuteFromPaths(char** paths, char** argv) {
     char* arg = paths[0];
     while (arg != nullptr){
         //cout << (string(arg) + "/" + string(argv[0])).c_str() << endl;
-
-        execvp((string(arg) + "/" + string(argv[0])).c_str(), argv);
+        execv((string(arg) + "/" + string(argv[0])).c_str(), argv);
         arg = paths[++len];
     }
 }
@@ -93,9 +91,12 @@ std::string addTwoStrings(const std::string& a, const std::string& b)
 {
     return a + b;
 }
-int clearConsole(int a, int b) {
+void clearConsole() {
     system("clear"); // I dont think this is legal unfortunatly
-    cout << "\033[32m[DOTSH] \033[37m$ ";
+    cout << "\e[1m\033[96m[DOTSH] \033[0m$\033[30m ";
+}
+int clearConsole(int a, int b) {
+    clearConsole();
     return 0;
 }
 void setupHotkeys() {
@@ -103,19 +104,8 @@ void setupHotkeys() {
     rl_command_func_t clearConsole; // declare it as a certain type of function so bind_key can use it properly
     rl_bind_key ('\x0C', clearConsole);//ctrl l
 }
-void initConsoleHistory() {
-    struct passwd *pw = getpwuid(getuid());
-    homedir = pw->pw_dir;
-    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
-    historyDir = hd.c_str();
-    cout << historyDir;
-    read_history(historyDir);
-}
 char** readInput(char** in, wordexp_t* wordsP) {
-    cout << "\033[31m";
-    *in = readline(" $ "); // later split &&
-    cout << "\033[37m";
-
+    *in = readline(" \033[0m$\033[30m "); // later split &&
     if (**in) add_history(*in);
     //auto argv = splitString(input, " "); // this is so sad, we wasted our time
     int wexp = wordexp(*in, wordsP, 0);
@@ -127,12 +117,21 @@ void acceptCommands() {
 
     wordexp_t * wordsP;
 
+    struct passwd *pw = getpwuid(getuid());
+    const char* homedir = pw->pw_dir;
+    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
+    const char* historyDir = hd.c_str();
+    read_history(historyDir);
+
     while (true) {
 
         auto argv = readInput(&in, wordsP);
+        cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
 
         //printArgs(argv);
+        if (!argv[0]) continue;
         string command = string(argv[0]);
+        
         if (command == "cd") {
             chdir(argv[1]);
             continue;
@@ -152,7 +151,6 @@ void acceptCommands() {
             // this is a parent :)
             int status;
             pid_t terminated_pid = waitpid(pid, &status, 0);
-            continue;
         } else { // child go do the work
             tryExecute(argv);
         }
@@ -167,6 +165,5 @@ void initConsole() {
 int main() {
     initConsole();
     setupHotkeys();
-    initConsoleHistory();
     acceptCommands();
 }
