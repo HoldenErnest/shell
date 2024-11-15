@@ -12,6 +12,11 @@
 
 using namespace std;
 
+//Global Variables------------------
+const char* historyDir;
+const char *homedir;
+// END Global Variables-------------
+
 void makeArrayBigger(char*** fullArray, int* totalArrLen) {
     int newLen = *totalArrLen * 2; // double the size
     char** newArray = new char*[newLen];
@@ -89,8 +94,8 @@ std::string addTwoStrings(const std::string& a, const std::string& b)
     return a + b;
 }
 int clearConsole(int a, int b) {
-    system("clear");
-    cout << "[DOTSH] $ ";
+    system("clear"); // I dont think this is legal unfortunatly
+    cout << "\033[32m[DOTSH] \033[37m$ ";
     return 0;
 }
 void setupHotkeys() {
@@ -98,30 +103,33 @@ void setupHotkeys() {
     rl_command_func_t clearConsole; // declare it as a certain type of function so bind_key can use it properly
     rl_bind_key ('\x0C', clearConsole);//ctrl l
 }
+void initConsoleHistory() {
+    struct passwd *pw = getpwuid(getuid());
+    homedir = pw->pw_dir;
+    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
+    historyDir = hd.c_str();
+    cout << historyDir;
+    read_history(historyDir);
+}
+char** readInput(char** in, wordexp_t* wordsP) {
+    cout << "\033[31m";
+    *in = readline(" $ "); // later split &&
+    cout << "\033[37m";
+
+    if (**in) add_history(*in);
+    //auto argv = splitString(input, " "); // this is so sad, we wasted our time
+    int wexp = wordexp(*in, wordsP, 0);
+    return wordsP->we_wordv;
+}
 void acceptCommands() {
     char* in;
-
-    struct passwd *pw = getpwuid(getuid());
-    const char *homedir = pw->pw_dir;
-    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
-    const char* historyDir = hd.c_str();
-
-    
-    setupHotkeys();
-    
-    read_history(historyDir);
     //rl_attempted_completion_function = some_tab_completion_function_override;
 
     wordexp_t * wordsP;
 
     while (true) {
 
-        in = readline(" $ "); // later split &&
-        
-        if (*in) add_history(in);
-        //auto argv = splitString(input, " "); // this is so sad, we wasted our time
-        int wexp = wordexp(in, wordsP, 0);
-        auto argv = wordsP->we_wordv;
+        auto argv = readInput(&in, wordsP);
 
         //printArgs(argv);
         string command = string(argv[0]);
@@ -152,8 +160,13 @@ void acceptCommands() {
         free(in); // free the memory for each command
     }
 }
+void initConsole() {
+    //TODO: maybe add some
+}
 
 int main() {
-
+    initConsole();
+    setupHotkeys();
+    initConsoleHistory();
     acceptCommands();
 }
