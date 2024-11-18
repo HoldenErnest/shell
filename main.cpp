@@ -12,8 +12,11 @@
 
 using namespace std;
 
-//Global Variables------------------
+void tryExecute(char** argv);
 
+//Global Variables------------------
+const int PIPE_READ = 0;
+const int PIPE_WRITE = 1;
 // END Global Variables-------------
 
 void makeArrayBigger(char*** fullArray, int* totalArrLen) {
@@ -45,6 +48,32 @@ void printArgs(char** argv, int len) {
         cout << string(argv[i]) <<  " ";
     }
     cout << endl;
+}
+void pipeCommand(char** cmd1, char** cmd2) { // https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
+  int fds[2]; // file descriptors
+  pipe(fds);
+  // child process #1
+  if (fork() == 0) {
+    // Reassign stdin to fds[0] end of pipe.
+    dup2(fds[0], PIPE_READ);
+    close(fds[1]);
+    close(fds[0]);
+    // Execute the second command.
+    // child process #2
+    if (fork() == 0) {
+        // Reassign stdout to fds[1] end of pipe.
+        dup2(fds[1], PIPE_WRITE);
+        close(fds[0]);
+        close(fds[1]);
+        // Execute the first command.
+        tryExecute(cmd1);
+    }
+    wait(NULL); // wait for any child to die
+    tryExecute(cmd2);
+    }
+    close(fds[1]);
+    close(fds[0]);
+    wait(NULL);
 }
 char** splitString(string input, string delim) { // LEGACY (kinda)
     if (input == "") return NULL;
@@ -81,8 +110,13 @@ void tryExecuteFromPaths(char** paths, char** argv) {
         execv((string(arg) + "/" + string(argv[0])).c_str(), argv);
         arg = paths[++len];
     }
+    cout << "not a valid command" << endl;
+    exit (0);
 }
 void tryExecute(char** argv) {
+    // find first ';' and first '&&'. split at the sooner one and then actually execute the first half, while sending the second half to tryExecute() again
+    // within that find < or > and change fd to pipe in or pipe out accordingly
+    // if |, make sure both are commands
     auto paths = splitString(getenv("PATH"), ":");
     tryExecuteFromPaths(paths, argv);
     exit(0);
@@ -99,6 +133,13 @@ int clearConsole(int a, int b) {
     clearConsole();
     return 0;
 }
+void smile() {
+    cout << "\n\e[1m\033[96m:)\n \033[0m$\033[30m ";
+}
+int smile(int a, int b) {
+    smile();
+    return 0;
+}
 string getHomeDir() {
     return getenv("HOME");
 }
@@ -113,6 +154,8 @@ void setupHotkeys() {
     rl_initialize();
     rl_command_func_t clearConsole; // declare it as a certain type of function so bind_key can use it properly
     rl_bind_key ('\x0C', clearConsole);//ctrl l
+    rl_command_func_t smile;
+    rl_bind_key ('\x02', smile);//ctrl b
 }
 char** readInput(char** in, wordexp_t* wordsP) {
     char cwd[1024];
@@ -148,7 +191,10 @@ void acceptCommands() {
         string command = string(argv[0]);
         
         if (command == "cd") {
-            chdir(argv[1]);
+            int c = chdir(argv[1]);
+            if (c == -1) {
+                cout << "no such directory" << endl;
+            }
             continue;
         } else if (command == "exit") {
             write_history(historyDir);
