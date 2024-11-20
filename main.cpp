@@ -12,7 +12,7 @@
 
 using namespace std;
 
-void tryExecute(char** argv, int totalLen);
+void tryExecute(char** argv);
 
 //Global Variables------------------
 const int PIPE_READ = 0;
@@ -49,7 +49,7 @@ void printArgs(char** argv, int len) {
     }
     cout << endl;
 }
-void pipeCommand(char** cmd1, int c1l, char** cmd2, int c2l) { // https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
+void pipeCommand(char** cmd1, char** cmd2) { // https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
   int fds[2]; // file descriptors
   pipe(fds);
   // child process #1
@@ -66,10 +66,10 @@ void pipeCommand(char** cmd1, int c1l, char** cmd2, int c2l) { // https://stacko
         close(fds[0]);
         close(fds[1]);
         // Execute the first command.
-        tryExecute(cmd1, c1l);
+        tryExecute(cmd1);
     }
     wait(NULL); // wait for any child to die
-    tryExecute(cmd2, c2l);
+    tryExecute(cmd2);
     }
     close(fds[1]);
     close(fds[0]);
@@ -128,12 +128,12 @@ void tryExecuteFromPaths(char** paths, char** argv) {
     cout << "not a valid command" << endl;
     exit (0);
 }
-void tryExecute(char** argv, int totalArgs) {
+void tryExecute(char** argv) {
     
     // if there arent any weird delimiters, just execute as normal
     auto paths = splitString(getenv("PATH"), ":");
     tryExecuteFromPaths(paths, argv);
-    exit(0);
+    exit(1); // problem
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
 {
@@ -171,7 +171,26 @@ void setupHotkeys() {
     rl_command_func_t smile;
     rl_bind_key ('\x02', smile);//ctrl b
 }
-char** readInput(char** in, wordexp_t* wordsP) {
+int getSize(char** arr) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        ar = arr[++i];
+    }
+    return i+1;
+}
+int findFirst(char** arr, const char* findIt) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        if (ar == findIt) {
+            return i;
+        }
+        ar = arr[++i];
+    }
+    return -1;
+}
+char** readInput(char** in) {
     char cwd[1024];
     string cc = string(getcwd(cwd, sizeof(cwd)));
     string hd = getHomeDir();
@@ -179,48 +198,63 @@ char** readInput(char** in, wordexp_t* wordsP) {
     string linehead =  "\033[32m" + cc + " \033[0m$\033[30m ";
     *in = readline(linehead.c_str()); // later split &&
     if (**in) add_history(*in);
-    //auto argv = splitString(input, " "); // this is so sad, we wasted our time
+    auto argv = splitString(*in, " "); // this is so sad, we wasted our time
 
-    //IMPORTANT: word expansion cannot take | > < ; ect, so we have to split on that beforehand
-    /*
-    // find first ';' and first '&&'. split at the sooner one and then actually execute the first half, while sending the second half to tryExecute() again
-    // within that find < or > and change fd to pipe in or pipe out accordingly
-    // if |, make sure both are commands
-    char* arg = argv[0];
-    int i = 0;
-    char** c1;
-    char** c2;
-    while (arg != nullptr) {
-        if (arg == "|") {
-            //splitArgsAt(argv, i,totalArgs, c1, c2);
-            //split at i and send to pipeExec()
-            //printArgs(c1);
-            //printArgs(c2);
-            //pipeCommand(c1,i, c2, totalArgs-i);
-            return;
-        } else if (arg == "<") {
-            //split at i, pass from right file to left command
-            return;
-        } else if (arg == ">") {
-            //split at i, execute left command and pass to right file
-            return;
-        } else if (arg == "&&") {
-            //split at i and execute first then second (only if the first was successful !)
-            return;
-        } else if (arg == ";") {
-            //split at i and execute first then second
-            return;
-        }
-        arg = argv[++i];
+    return argv;
+}
+void parseAllCommands(char** allCommands, const char* hDir) {
+    char** command1;
+
+    int totalLen = getSize(allCommands);
+    int splitPos = findFirst(allCommands, "&&");
+    cout << splitPos << " is the split" << endl;
+    if (splitPos > 0)
+        splitArgsAt(allCommands, 0, totalLen, command1, allCommands); // command1 is the command to be executed, allCommands are anything in queue
+    else {
+        command1 = allCommands;
+        allCommands = nullptr;
     }
-    */
+    printArgs(command1);
+    if (!command1[0]) return;
+    string command = string(command1[0]);
 
-    int wexp = wordexp(*in, wordsP, 0);
-    return wordsP->we_wordv;
+    if (command == "cd") {
+        int c = chdir(command1[1]);
+        if (c == -1) {
+            cout << "no such directory" << endl;
+        }
+    } else if (command == "exit") {
+        write_history(hDir);
+        exit(0);
+    }
+
+    // Forking stuff --------------------
+    int pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(0);
+    }
+    if (pid > 0) {
+        // this is a parent :)
+        int status;
+        pid_t terminated_pid = waitpid(pid, &status, 0);
+        if (terminated_pid == 0) {
+            cout << "command successfully executed" << endl;
+        }
+        cout << "SAfafsfsa";
+        //if 0 command success
+    } else { // child go do the work
+        cout << "things" << endl;
+        tryExecute(command1);
+        // problem?
+        exit(0);
+    }
+
+    //if (allCommands != nullptr) parseAllCommands(allCommands, hDir);
+    //command1 = nullptr;
 }
 void acceptCommands() {
     char* in;
-    //rl_attempted_completion_function = some_tab_completion_function_override;
 
     wordexp_t * wordsP;
 
@@ -231,43 +265,12 @@ void acceptCommands() {
     read_history(historyDir);
 
     while (true) {
+        auto argv = readInput(&in);
 
-        auto argv = readInput(&in, wordsP);
-        int totalArgs = wordsP->we_wordc;
         cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
 
-        //printArgs(argv);
-        if (!argv[0]) continue;
-        string command = string(argv[0]);
-
-        if (command == "cd") {
-            int c = chdir(argv[1]);
-            if (c == -1) {
-                cout << "no such directory" << endl;
-            }
-            continue;
-        } else if (command == "exit") {
-            write_history(historyDir);
-            exit(0);
-        }
-
-        // Forking stuff --------------------
-        int pid = fork();
-        if (pid == -1) {
-            perror("fork");
-            exit(0);
-        }
-        if (pid > 0) {
-            // this is a parent :)
-            int status;
-            pid_t terminated_pid = waitpid(pid, &status, 0);
-            //if 0 command success
-        } else { // child go do the work
-            tryExecute(argv, totalArgs);
-            // problem?
-            cout << "there was a problem with execute";
-            exit(0);
-        }
+        parseAllCommands(argv, historyDir);
+        
         wordfree(wordsP);
         free(in); // free the memory for each command
     }

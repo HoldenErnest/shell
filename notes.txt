@@ -1,0 +1,3 @@
+to split
+ split ; and && both at the same time
+echo hello > a.txt ; ls | wc && wc < a.txt
