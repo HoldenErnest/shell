@@ -23,6 +23,10 @@ using namespace std;
 // 2 &&
 // 5 |
 // 1 |+
+// 3 <
+// 3 >
+// 3 >>
+// 1 | >
 // 5 RL stuff
 // 1 chdir
 // TOTAL 16
@@ -69,14 +73,19 @@ void printArgs(char** argv, int len) {
 void pipeCommand(char** cmd1, char** cmd2) {
     int fds[2]; // file descriptors
     pipe(fds);
-
-    if (fork() == 0) { // dup command 2 to pipe it to
+    int status;
+    int pid = -1;
+    if (pid = fork() == 0) { // dup command 2 to pipe it to
         dup2(fds[1], 1);
         close(fds[0]);
         close(fds[1]);
         tryExecute(cmd1);
     }
-    if (fork() == 0) { // dup command 1 to recieve it when exec
+    pid_t terminated_pid = waitpid(pid, &status, 0);
+    if (status != 0) {
+        cerr << "cannot pipe from '" << cmd1[0] << "'" << endl;
+    }
+    if (status == 0 && (pid = fork() == 0)) { // dup command 1 to recieve it when exec
         dup2(fds[0], 0);
         close(fds[0]);
         close(fds[1]);
@@ -84,7 +93,7 @@ void pipeCommand(char** cmd1, char** cmd2) {
     }
     close(fds[0]);
     close(fds[1]);
-    wait(NULL);
+    terminated_pid = waitpid(pid, &status, 0);
 }
 int getSize(char** arr) {
     int i = 0;
@@ -186,6 +195,7 @@ void tryRedirectExec(char** left, char** right,  bool app) {
         tryExecute(left);
     }
     wait(NULL);
+    exit (0);
 }
 void tryRedirectFromFile(char** left, char** right) {
     if (fork() == 0) {
@@ -205,6 +215,7 @@ void tryRedirectFromFile(char** left, char** right) {
         tryExecute(left);
     }
     wait(NULL);
+    exit (0);
 }
 void tryExecuteFromPaths(char** paths, char** argv) {
     int len = 0;
@@ -246,6 +257,7 @@ void tryExecute(char** argv) {
         auto paths = splitString(getenv("PATH"), ":");
         tryExecuteFromPaths(paths, argv);
     }
+    cerr << "GOT TO THINGS" << endl;
     exit(1); // problem
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
@@ -341,6 +353,8 @@ void parseAllCommands(char** allCommands, const char* hDir) {
             pid_t terminated_pid = waitpid(pid, &status, 0);
             if (status == 0 || ignoreExecResult) {
                 if (moreCommands != nullptr) parseAllCommands(moreCommands, hDir);
+            } else {
+                //cout << "ignored other half" << endl;
             }
         } else { // child go do the work
             tryExecute(command1);
