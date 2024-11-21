@@ -257,7 +257,6 @@ void tryExecute(char** argv) {
         auto paths = splitString(getenv("PATH"), ":");
         tryExecuteFromPaths(paths, argv);
     }
-    cerr << "GOT TO THINGS" << endl;
     exit(1); // problem
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
