@@ -49,46 +49,60 @@ void printArgs(char** argv, int len) {
     }
     cout << endl;
 }
-void pipeCommand(char** cmd1, char** cmd2) { // https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
-  int fds[2]; // file descriptors
-  pipe(fds);
-  // child process #1
-  if (fork() == 0) {
-    // Reassign stdin to fds[0] end of pipe.
-    dup2(fds[0], PIPE_READ);
-    close(fds[1]);
-    close(fds[0]);
-    // Execute the second command.
-    // child process #2
-    if (fork() == 0) {
-        // Reassign stdout to fds[1] end of pipe.
-        dup2(fds[1], PIPE_WRITE);
+// https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
+void pipeCommand(char** cmd1, char** cmd2) {
+    int fds[2]; // file descriptors
+    pipe(fds);
+
+    if (fork() == 0) { // dup command 2 to pipe it to
+        dup2(fds[1], 1);
         close(fds[0]);
         close(fds[1]);
-        // Execute the first command.
-        tryExecute(cmd1);
+        execvp(cmd1[0], cmd1);
     }
-    wait(NULL); // wait for any child to die
-    tryExecute(cmd2);
+    if (fork() == 0) { // dup command 1 to recieve it when exec
+        dup2(fds[0], 0);
+        close(fds[0]);
+        close(fds[1]);
+        execvp(cmd2[0], cmd2);
     }
-    close(fds[1]);
     close(fds[0]);
+    close(fds[1]);
     wait(NULL);
 }
-void splitArgsAt(char** in, int splitPos, int totalLen, char** outleft, char** outright) {// splits the array at pos into left and right arrays
-    int len1 = splitPos + 1;
-    int len2 = totalLen - splitPos;
-    
-    outleft = new char*[len1]; // remove the split position [1, 2, x, 3] // i=2
-    outright = new char*[len2]; // 4 - 2 - 1 = 1
+int getSize(char** arr) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        ar = arr[++i];
+    }
+    return i;
+}
+int findFirst(char** arr, const char* findIt) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        if (strcmp(ar, findIt) == 0) {
+            return i;
+        }
+        ar = arr[++i];
+    }
+    return -1;
+}
+void splitArgsAt(char** in, int splitPos, int totalLen, char*** outleft, char*** outright) {// splits the array at pos into left and right arrays
+    int len1 = splitPos;
+    int len2 = totalLen - splitPos - 1;
+    *outleft = new char*[len1+1]; // remove the split position [1, 2, x, 3] // i=2
+    *outright = new char*[len2+1]; // 4 - 2 - 1 = 1
     for (int i = 0; i < len1; i++) {
-        outleft[i] = in[i];
+        (*outleft)[i] = in[i];
     }
-    outleft[len1] = nullptr;
-    for (int i = len1; i < totalLen; i++) {
-        outright[i-(splitPos+1)] = in[i];
+    (*outleft)[len1] = nullptr;
+    for (int i = len1+1; i < totalLen; i++) {
+        int index = i-(splitPos+1);
+        (*outright)[index] = in[i];
     }
-    outright[len2] = nullptr;
+    (*outright)[len2] = nullptr;
 }
 char** splitString(string input, string delim) { // LEGACY (kinda)
     if (input == "") return NULL;
@@ -126,13 +140,22 @@ void tryExecuteFromPaths(char** paths, char** argv) {
         arg = paths[++len];
     }
     cout << "not a valid command" << endl;
-    exit (0);
+    exit (1);
 }
 void tryExecute(char** argv) {
     
-    // if there arent any weird delimiters, just execute as normal
-    auto paths = splitString(getenv("PATH"), ":");
-    tryExecuteFromPaths(paths, argv);
+    char** left;
+    char** right;
+    int pipeC = findFirst(argv, "|");
+    if (pipeC > 0) {
+        splitArgsAt(argv, pipeC, getSize(argv), &left, &right);
+        pipeCommand(left, right);
+    } else {
+        //! TODO: use wordExp() now
+        // if there arent any weird delimiters, just execute as normal
+        auto paths = splitString(getenv("PATH"), ":");
+        tryExecuteFromPaths(paths, argv);
+    }
     exit(1); // problem
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
@@ -171,25 +194,7 @@ void setupHotkeys() {
     rl_command_func_t smile;
     rl_bind_key ('\x02', smile);//ctrl b
 }
-int getSize(char** arr) {
-    int i = 0;
-    char* ar = arr[0];
-    while (ar != nullptr) {
-        ar = arr[++i];
-    }
-    return i+1;
-}
-int findFirst(char** arr, const char* findIt) {
-    int i = 0;
-    char* ar = arr[0];
-    while (ar != nullptr) {
-        if (ar == findIt) {
-            return i;
-        }
-        ar = arr[++i];
-    }
-    return -1;
-}
+
 char** readInput(char** in) {
     char cwd[1024];
     string cc = string(getcwd(cwd, sizeof(cwd)));
@@ -203,18 +208,25 @@ char** readInput(char** in) {
     return argv;
 }
 void parseAllCommands(char** allCommands, const char* hDir) {
-    char** command1;
+    if (allCommands == nullptr)
+        return;
+    //wordexp_t * wordsP;
+    char** command1 = nullptr;
+    char** moreCommands = nullptr;
 
     int totalLen = getSize(allCommands);
     int splitPos = findFirst(allCommands, "&&");
-    cout << splitPos << " is the split" << endl;
-    if (splitPos > 0)
-        splitArgsAt(allCommands, 0, totalLen, command1, allCommands); // command1 is the command to be executed, allCommands are anything in queue
-    else {
+
+    bool ignoreExecResult = false;
+    if (splitPos > 0) {
+        splitArgsAt(allCommands, splitPos, totalLen, &command1, &moreCommands); // command1 is the command to be executed, allCommands are anything in queue
+    } else {
         command1 = allCommands;
-        allCommands = nullptr;
+        moreCommands = nullptr;
     }
-    printArgs(command1);
+    // from this command split off the < and > and >>
+    //cout << "printing current command: " << endl;
+    //printArgs(command1);
     if (!command1[0]) return;
     string command = string(command1[0]);
 
@@ -226,37 +238,31 @@ void parseAllCommands(char** allCommands, const char* hDir) {
     } else if (command == "exit") {
         write_history(hDir);
         exit(0);
-    }
-
-    // Forking stuff --------------------
-    int pid = fork();
-    if (pid == -1) {
-        perror("fork");
-        exit(0);
-    }
-    if (pid > 0) {
-        // this is a parent :)
-        int status;
-        pid_t terminated_pid = waitpid(pid, &status, 0);
-        if (terminated_pid == 0) {
-            cout << "command successfully executed" << endl;
+    } else {
+        // Forking stuff --------------------
+        int pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            exit(0);
         }
-        cout << "SAfafsfsa";
-        //if 0 command success
-    } else { // child go do the work
-        cout << "things" << endl;
-        tryExecute(command1);
-        // problem?
-        exit(0);
+        if (pid > 0) {
+            // this is a parent :)
+            int status;
+            pid_t terminated_pid = waitpid(pid, &status, 0);
+            if (status == 0 || ignoreExecResult) {
+                if (moreCommands != nullptr) parseAllCommands(moreCommands, hDir);
+            }
+        } else { // child go do the work
+            tryExecute(command1);
+            // problem?
+            exit(1);
+        }
     }
-
-    //if (allCommands != nullptr) parseAllCommands(allCommands, hDir);
-    //command1 = nullptr;
+    
+    //wordfree(wordsP);
 }
 void acceptCommands() {
     char* in;
-
-    wordexp_t * wordsP;
 
     struct passwd *pw = getpwuid(getuid());
     const char* homedir = pw->pw_dir;
@@ -270,8 +276,7 @@ void acceptCommands() {
         cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
 
         parseAllCommands(argv, historyDir);
-        
-        wordfree(wordsP);
+        //wordfree(wordsP);
         free(in); // free the memory for each command
     }
 }
