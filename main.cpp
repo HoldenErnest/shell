@@ -29,7 +29,7 @@ using namespace std;
 // 1 | >
 // 5 RL stuff
 // 1 chdir
-// TOTAL 16
+// TOTAL 28
 
 
 void tryExecute(char** argv);
