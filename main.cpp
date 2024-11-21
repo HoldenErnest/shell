@@ -27,6 +27,7 @@ using namespace std;
 // 3 >
 // 3 >>
 // 1 | >
+// 4 < | > +
 // 5 RL stuff
 // 1 chdir
 // TOTAL 28
