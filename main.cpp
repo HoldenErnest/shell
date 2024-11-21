@@ -27,10 +27,10 @@ using namespace std;
 // 3 >
 // 3 >>
 // 1 | >
-// 4 < | > +
+//? 4 < | > +
 // 5 RL stuff
 // 1 chdir
-// TOTAL 28
+// TOTAL 28 ?32?
 
 
 void tryExecute(char** argv);
