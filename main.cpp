@@ -1,3 +1,8 @@
+// Holden Ernest - some date :(
+
+// recreate a shell experience from scratch
+// Damage Over Time shell - DOTsh
+
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +17,17 @@
 
 using namespace std;
 
-void tryExecute(char** argv, int totalLen);
+// 1 exec
+// 3 execv
+// 2 &&
+// 5 |
+// 1 |+
+// 5 RL stuff
+// 1 chdir
+// TOTAL 16
+
+
+void tryExecute(char** argv);
 
 //Global Variables------------------
 const int PIPE_READ = 0;
@@ -49,46 +64,60 @@ void printArgs(char** argv, int len) {
     }
     cout << endl;
 }
-void pipeCommand(char** cmd1, int c1l, char** cmd2, int c2l) { // https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
-  int fds[2]; // file descriptors
-  pipe(fds);
-  // child process #1
-  if (fork() == 0) {
-    // Reassign stdin to fds[0] end of pipe.
-    dup2(fds[0], PIPE_READ);
-    close(fds[1]);
-    close(fds[0]);
-    // Execute the second command.
-    // child process #2
-    if (fork() == 0) {
-        // Reassign stdout to fds[1] end of pipe.
-        dup2(fds[1], PIPE_WRITE);
+// https://stackoverflow.com/questions/1461331/writing-my-own-shell-stuck-on-pipes
+void pipeCommand(char** cmd1, char** cmd2) {
+    int fds[2]; // file descriptors
+    pipe(fds);
+
+    if (fork() == 0) { // dup command 2 to pipe it to
+        dup2(fds[1], 1);
         close(fds[0]);
         close(fds[1]);
-        // Execute the first command.
-        tryExecute(cmd1, c1l);
+        tryExecute(cmd1);
     }
-    wait(NULL); // wait for any child to die
-    tryExecute(cmd2, c2l);
+    if (fork() == 0) { // dup command 1 to recieve it when exec
+        dup2(fds[0], 0);
+        close(fds[0]);
+        close(fds[1]);
+        tryExecute(cmd2);
     }
-    close(fds[1]);
     close(fds[0]);
+    close(fds[1]);
     wait(NULL);
 }
-void splitArgsAt(char** in, int splitPos, int totalLen, char** outleft, char** outright) {// splits the array at pos into left and right arrays
-    int len1 = splitPos + 1;
-    int len2 = totalLen - splitPos;
-    
-    outleft = new char*[len1]; // remove the split position [1, 2, x, 3] // i=2
-    outright = new char*[len2]; // 4 - 2 - 1 = 1
+int getSize(char** arr) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        ar = arr[++i];
+    }
+    return i;
+}
+int findFirst(char** arr, const char* findIt) {
+    int i = 0;
+    char* ar = arr[0];
+    while (ar != nullptr) {
+        if (strcmp(ar, findIt) == 0) {
+            return i;
+        }
+        ar = arr[++i];
+    }
+    return -1;
+}
+void splitArgsAt(char** in, int splitPos, int totalLen, char*** outleft, char*** outright) {// splits the array at pos into left and right arrays
+    int len1 = splitPos;
+    int len2 = totalLen - splitPos - 1;
+    *outleft = new char*[len1+1]; // remove the split position [1, 2, x, 3] // i=2
+    *outright = new char*[len2+1]; // 4 - 2 - 1 = 1
     for (int i = 0; i < len1; i++) {
-        outleft[i] = in[i];
+        (*outleft)[i] = in[i];
     }
-    outleft[len1] = nullptr;
-    for (int i = len1; i < totalLen; i++) {
-        outright[i-(splitPos+1)] = in[i];
+    (*outleft)[len1] = nullptr;
+    for (int i = len1+1; i < totalLen; i++) {
+        int index = i-(splitPos+1);
+        (*outright)[index] = in[i];
     }
-    outright[len2] = nullptr;
+    (*outright)[len2] = nullptr;
 }
 char** splitString(string input, string delim) { // LEGACY (kinda)
     if (input == "") return NULL;
@@ -126,14 +155,23 @@ void tryExecuteFromPaths(char** paths, char** argv) {
         arg = paths[++len];
     }
     cout << "not a valid command" << endl;
-    exit (0);
+    exit (1);
 }
-void tryExecute(char** argv, int totalArgs) {
+void tryExecute(char** argv) {
     
-    // if there arent any weird delimiters, just execute as normal
-    auto paths = splitString(getenv("PATH"), ":");
-    tryExecuteFromPaths(paths, argv);
-    exit(0);
+    char** left;
+    char** right;
+    int pipeC = findFirst(argv, "|");
+    if (pipeC > 0) {
+        splitArgsAt(argv, pipeC, getSize(argv), &left, &right);
+        pipeCommand(left, right);
+    } else {
+        //! TODO: use wordExp() now
+        // if there arent any weird delimiters, just execute as normal
+        auto paths = splitString(getenv("PATH"), ":");
+        tryExecuteFromPaths(paths, argv);
+    }
+    exit(1); // problem
 }
 std::string addTwoStrings(const std::string& a, const std::string& b)
 {
@@ -171,7 +209,8 @@ void setupHotkeys() {
     rl_command_func_t smile;
     rl_bind_key ('\x02', smile);//ctrl b
 }
-char** readInput(char** in, wordexp_t* wordsP) {
+
+char** readInput(char** in) {
     char cwd[1024];
     string cc = string(getcwd(cwd, sizeof(cwd)));
     string hd = getHomeDir();
@@ -179,78 +218,42 @@ char** readInput(char** in, wordexp_t* wordsP) {
     string linehead =  "\033[32m" + cc + " \033[0m$\033[30m ";
     *in = readline(linehead.c_str()); // later split &&
     if (**in) add_history(*in);
-    //auto argv = splitString(input, " "); // this is so sad, we wasted our time
+    auto argv = splitString(*in, " "); // this is so sad, we wasted our time
 
-    //IMPORTANT: word expansion cannot take | > < ; ect, so we have to split on that beforehand
-    /*
-    // find first ';' and first '&&'. split at the sooner one and then actually execute the first half, while sending the second half to tryExecute() again
-    // within that find < or > and change fd to pipe in or pipe out accordingly
-    // if |, make sure both are commands
-    char* arg = argv[0];
-    int i = 0;
-    char** c1;
-    char** c2;
-    while (arg != nullptr) {
-        if (arg == "|") {
-            //splitArgsAt(argv, i,totalArgs, c1, c2);
-            //split at i and send to pipeExec()
-            //printArgs(c1);
-            //printArgs(c2);
-            //pipeCommand(c1,i, c2, totalArgs-i);
-            return;
-        } else if (arg == "<") {
-            //split at i, pass from right file to left command
-            return;
-        } else if (arg == ">") {
-            //split at i, execute left command and pass to right file
-            return;
-        } else if (arg == "&&") {
-            //split at i and execute first then second (only if the first was successful !)
-            return;
-        } else if (arg == ";") {
-            //split at i and execute first then second
-            return;
-        }
-        arg = argv[++i];
-    }
-    */
-
-    int wexp = wordexp(*in, wordsP, 0);
-    return wordsP->we_wordv;
+    return argv;
 }
-void acceptCommands() {
-    char* in;
-    //rl_attempted_completion_function = some_tab_completion_function_override;
+void parseAllCommands(char** allCommands, const char* hDir) {
+    if (allCommands == nullptr)
+        return;
+    //wordexp_t * wordsP;
+    char** command1 = nullptr;
+    char** moreCommands = nullptr;
 
-    wordexp_t * wordsP;
+    int totalLen = getSize(allCommands);
+    int splitPos = findFirst(allCommands, "&&");
 
-    struct passwd *pw = getpwuid(getuid());
-    const char* homedir = pw->pw_dir;
-    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
-    const char* historyDir = hd.c_str();
-    read_history(historyDir);
+    bool ignoreExecResult = false;
+    if (splitPos > 0) {
+        splitArgsAt(allCommands, splitPos, totalLen, &command1, &moreCommands); // command1 is the command to be executed, allCommands are anything in queue
+    } else {
+        command1 = allCommands;
+        moreCommands = nullptr;
+    }
+    // from this command split off the < and > and >>
+    //cout << "printing current command: " << endl;
+    //printArgs(command1);
+    if (!command1[0]) return;
+    string command = string(command1[0]);
 
-    while (true) {
-
-        auto argv = readInput(&in, wordsP);
-        int totalArgs = wordsP->we_wordc;
-        cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
-
-        //printArgs(argv);
-        if (!argv[0]) continue;
-        string command = string(argv[0]);
-
-        if (command == "cd") {
-            int c = chdir(argv[1]);
-            if (c == -1) {
-                cout << "no such directory" << endl;
-            }
-            continue;
-        } else if (command == "exit") {
-            write_history(historyDir);
-            exit(0);
+    if (command == "cd") {
+        int c = chdir(command1[1]);
+        if (c == -1) {
+            cout << "no such directory" << endl;
         }
-
+    } else if (command == "exit") {
+        write_history(hDir);
+        exit(0);
+    } else {
         // Forking stuff --------------------
         int pid = fork();
         if (pid == -1) {
@@ -261,14 +264,34 @@ void acceptCommands() {
             // this is a parent :)
             int status;
             pid_t terminated_pid = waitpid(pid, &status, 0);
-            //if 0 command success
+            if (status == 0 || ignoreExecResult) {
+                if (moreCommands != nullptr) parseAllCommands(moreCommands, hDir);
+            }
         } else { // child go do the work
-            tryExecute(argv, totalArgs);
+            tryExecute(command1);
             // problem?
-            cout << "there was a problem with execute";
-            exit(0);
+            exit(1);
         }
-        wordfree(wordsP);
+    }
+    
+    //wordfree(wordsP);
+}
+void acceptCommands() {
+    char* in;
+
+    struct passwd *pw = getpwuid(getuid());
+    const char* homedir = pw->pw_dir;
+    string hd = (addTwoStrings(homedir,"/.dotsh_history"));
+    const char* historyDir = hd.c_str();
+    read_history(historyDir);
+
+    while (true) {
+        auto argv = readInput(&in);
+
+        cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
+
+        parseAllCommands(argv, historyDir);
+        //wordfree(wordsP);
         free(in); // free the memory for each command
     }
 }
