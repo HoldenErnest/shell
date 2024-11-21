@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <wordexp.h>
+#include <fcntl.h>
 
 using namespace std;
 
@@ -146,6 +147,65 @@ char** splitString(string input, string delim) { // LEGACY (kinda)
     fullArray[totalArgs] = nullptr;
     return fullArray;
 }
+string concatArgs(char** args) {
+    int i = 0;
+    
+    char* arg = args[0];
+    string ans = "";
+    while (arg != nullptr) {
+        if (i > 0) {
+            ans += " ";  // Add a space before appending the next string
+        }
+        ans = ans + arg;
+        arg = args[++i];
+    }
+    return ans;
+}
+void expandAllWords(char** args, wordexp_t* cc) {
+    string ca = concatArgs(args);
+    int wexp = wordexp(ca.c_str(), cc, 0);
+}
+void tryRedirectExec(char** left, char** right,  bool app) {
+    if (fork() == 0) {
+        int fd = -1;
+        if (app)
+            fd = open(right[0], O_WRONLY | O_CREAT | O_APPEND, 0644);
+        else fd = open(right[0], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd == -1) {
+            std::cerr << "Error opening file!" << std::endl;
+            exit(1);
+        }
+
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            std::cerr << "Error redirecting stdout!" << std::endl;
+            exit(1);
+        }
+
+        // Step 4: Close the file
+        close(fd);
+        tryExecute(left);
+    }
+    wait(NULL);
+}
+void tryRedirectFromFile(char** left, char** right) {
+    if (fork() == 0) {
+        int fd = open(right[0], O_RDONLY, 0644);
+        if (fd == -1) {
+            std::cerr << "Error opening file!" << std::endl;
+            exit(1);
+        }
+
+        if (dup2(fd, STDIN_FILENO) == -1) {
+            std::cerr << "Error redirecting stdout!" << std::endl;
+            exit(1);
+        }
+
+        // Step 4: Close the file
+        close(fd);
+        tryExecute(left);
+    }
+    wait(NULL);
+}
 void tryExecuteFromPaths(char** paths, char** argv) {
     int len = 0;
     char* arg = paths[0];
@@ -162,9 +222,24 @@ void tryExecute(char** argv) {
     char** left;
     char** right;
     int pipeC = findFirst(argv, "|");
+    int ltC = findFirst(argv, "<");
+    int gtC = findFirst(argv, ">");
+    bool appGT = false;
+    if (gtC == -1) {
+        gtC = findFirst(argv, ">>");
+        if (gtC > 0) {
+            appGT = true;
+        }
+    }
     if (pipeC > 0) {
         splitArgsAt(argv, pipeC, getSize(argv), &left, &right);
-        pipeCommand(left, right);
+        pipeCommand(left, right); // exec of some kind
+    } else if (gtC > 0) {
+        splitArgsAt(argv, gtC, getSize(argv), &left, &right);
+        tryRedirectExec(left,right, appGT);
+    } else if (ltC > 0) {
+        splitArgsAt(argv, ltC, getSize(argv), &left, &right);
+        tryRedirectFromFile(left,right);
     } else {
         //! TODO: use wordExp() now
         // if there arent any weird delimiters, just execute as normal
@@ -225,7 +300,7 @@ char** readInput(char** in) {
 void parseAllCommands(char** allCommands, const char* hDir) {
     if (allCommands == nullptr)
         return;
-    //wordexp_t * wordsP;
+    
     char** command1 = nullptr;
     char** moreCommands = nullptr;
 
@@ -273,8 +348,6 @@ void parseAllCommands(char** allCommands, const char* hDir) {
             exit(1);
         }
     }
-    
-    //wordfree(wordsP);
 }
 void acceptCommands() {
     char* in;
@@ -291,7 +364,6 @@ void acceptCommands() {
         cout << "\e[A\033[0m" << endl; // for some reason readline cant print unless its on a new line. Workaround: replace the last line with a color I want to use
 
         parseAllCommands(argv, historyDir);
-        //wordfree(wordsP);
         free(in); // free the memory for each command
     }
 }
