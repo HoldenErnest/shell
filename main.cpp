@@ -1,3 +1,8 @@
+// Holden Ernest - some date :(
+
+// recreate a shell experience from scratch
+// Damage Over Time shell - DOTsh
+
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +16,16 @@
 #include <wordexp.h>
 
 using namespace std;
+
+// 1 exec
+// 3 execv
+// 2 &&
+// 5 |
+// 1 |+
+// 5 RL stuff
+// 1 chdir
+// TOTAL 16
+
 
 void tryExecute(char** argv);
 
@@ -58,13 +73,13 @@ void pipeCommand(char** cmd1, char** cmd2) {
         dup2(fds[1], 1);
         close(fds[0]);
         close(fds[1]);
-        execvp(cmd1[0], cmd1);
+        tryExecute(cmd1);
     }
     if (fork() == 0) { // dup command 1 to recieve it when exec
         dup2(fds[0], 0);
         close(fds[0]);
         close(fds[1]);
-        execvp(cmd2[0], cmd2);
+        tryExecute(cmd2);
     }
     close(fds[0]);
     close(fds[1]);
